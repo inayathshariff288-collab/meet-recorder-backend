@@ -1,8 +1,10 @@
 const axios = require("axios");
 const supabase = require("./supabaseClient");
 
+/* -------------------------------------------------- */
+/* REFRESH ZOOM TOKEN */
+/* -------------------------------------------------- */
 async function refreshZoomToken(userId) {
-  // Get refresh token from database
   const { data, error } = await supabase
     .from("users")
     .select("zoom_refresh_token")
@@ -36,7 +38,6 @@ async function refreshZoomToken(userId) {
 
     const { access_token, refresh_token } = response.data;
 
-    // Update new tokens in DB
     await supabase
       .from("users")
       .update({
@@ -51,4 +52,79 @@ async function refreshZoomToken(userId) {
   }
 }
 
-module.exports = { refreshZoomToken };
+/* -------------------------------------------------- */
+/* CREATE ZOOM MEETING */
+/* -------------------------------------------------- */
+async function createZoomMeeting(userId) {
+  const { data, error } = await supabase
+    .from("users")
+    .select("zoom_access_token")
+    .eq("id", userId)
+    .single();
+
+  if (error || !data) {
+    throw new Error("User not found");
+  }
+
+  let accessToken = data.zoom_access_token;
+
+  try {
+    const response = await axios.post(
+      "https://api.zoom.us/v2/users/me/meetings",
+      {
+        topic: "Automated Meeting",
+        type: 2, // Scheduled meeting
+        start_time: new Date().toISOString(),
+        duration: 30,
+        timezone: "UTC",
+        settings: {
+          join_before_host: true,
+          waiting_room: false,
+        },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    return response.data;
+  } catch (err) {
+    // If token expired → refresh and retry
+    if (err.response?.status === 401) {
+      accessToken = await refreshZoomToken(userId);
+
+      const retryResponse = await axios.post(
+        "https://api.zoom.us/v2/users/me/meetings",
+        {
+          topic: "Automated Meeting",
+          type: 2,
+          start_time: new Date().toISOString(),
+          duration: 30,
+          timezone: "UTC",
+          settings: {
+            join_before_host: true,
+            waiting_room: false,
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      return retryResponse.data;
+    }
+
+    throw new Error("Failed to create Zoom meeting");
+  }
+}
+
+module.exports = {
+  refreshZoomToken,
+  createZoomMeeting,
+};

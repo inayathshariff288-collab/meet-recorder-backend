@@ -3,6 +3,7 @@ const supabase = require("./supabaseClient");
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
+const { refreshZoomToken, createZoomMeeting } = require("./zoomService");
 
 const app = express();
 
@@ -147,6 +148,27 @@ app.get("/refresh-zoom/:userId", async (req, res) => {
   try {
     const newAccessToken = await refreshZoomToken(req.params.userId);
     res.json({ success: true, newAccessToken });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+app.get("/create-meeting/:userId", async (req, res) => {
+  try {
+    const meeting = await createZoomMeeting(req.params.userId);
+
+    // Save meeting in Supabase
+    await supabase.from("meetings").insert({
+      user_id: req.params.userId,
+      meeting_url: meeting.join_url,
+      meeting_id: meeting.id,
+      scheduled_time: meeting.start_time,
+      status: "scheduled",
+    });
+
+    res.json({
+      success: true,
+      meeting,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
