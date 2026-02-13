@@ -141,6 +141,16 @@ app.get("/auth/zoom/callback", async (req, res) => {
 /* SERVER START */
 /* -------------------------------------------------- */
 const PORT = process.env.PORT || 5000;
+const { refreshZoomToken } = require("./zoomService");
+
+app.get("/refresh-zoom/:userId", async (req, res) => {
+  try {
+    const newAccessToken = await refreshZoomToken(req.params.userId);
+    res.json({ success: true, newAccessToken });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
